@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>specs explorer</title>
+<style>
+  :root {
+    --bg: #ffffff; --bg2: #f6f7f9; --fg: #1a1d21; --fg2: #5c6470;
+    --line: #e3e6ea; --accent: #2563eb; --accent-bg: #eff4ff;
+    --ok: #16803c; --warn: #b45309; --code-bg: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --bg2: #1b1e24; --fg: #e6e8eb; --fg2: #9aa3ad;
+      --line: #2b3038; --accent: #7aa2ff; --accent-bg: #1d2534;
+      --ok: #4ade80; --warn: #fbbf24; --code-bg: #22262e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: var(--bg); z-index: 5;
+  }
+  header h1 { font-size: 16px; margin: 0; }
+  header .counts { color: var(--fg2); font-size: 12.5px; }
+  nav { display: flex; gap: 4px; margin-left: auto; }
+  nav button {
+    border: 1px solid transparent; background: none; color: var(--fg2);
+    padding: 5px 11px; border-radius: 7px; cursor: pointer; font: inherit; font-size: 13px;
+  }
+  nav button.on { background: var(--accent-bg); color: var(--accent); border-color: var(--line); }
+  .bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 20px 0; }
+  .bar input[type=search] {
+    flex: 1 1 260px; max-width: 420px; padding: 7px 11px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--bg2); color: var(--fg); font: inherit; outline: none;
+  }
+  .bar input[type=search]:focus { border-color: var(--accent); }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    border: 1px solid var(--line); background: none; color: var(--fg2); cursor: pointer;
+    padding: 4px 10px; border-radius: 999px; font: inherit; font-size: 12.5px;
+  }
+  .chip.on { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+  main { padding: 12px 20px 60px; max-width: 1100px; }
+  table.list { width: 100%; border-collapse: collapse; }
+  table.list th {
+    text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--fg2); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  table.list td { padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.list tr.row { cursor: pointer; }
+  table.list tr.row:hover td { background: var(--bg2); }
+  .num { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; color: var(--fg2); white-space: nowrap; }
+  .t { font-weight: 550; }
+  .muted { color: var(--fg2); font-size: 12.5px; }
+  .status { white-space: nowrap; font-size: 12.5px; }
+  .blocked { color: var(--warn); }
+  .note { color: var(--fg2); font-size: 12.5px; max-width: 420px; }
+  .empty { color: var(--fg2); padding: 30px 10px; }
+
+  /* detail overlay */
+  #overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; z-index: 20;
+  }
+  #overlay.show { display: block; }
+  #panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(860px, 94vw);
+    background: var(--bg); border-left: 1px solid var(--line); overflow-y: auto; z-index: 21;
+    transform: translateX(100%); transition: transform .15s ease; box-shadow: -12px 0 40px rgba(0,0,0,.15);
+  }
+  #panel.show { transform: none; }
+  #panel .phead {
+    position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--line);
+    padding: 12px 22px; display: flex; gap: 12px; align-items: center;
+  }
+  #panel .phead .close {
+    margin-left: auto; border: 1px solid var(--line); background: none; color: var(--fg2);
+    border-radius: 7px; padding: 4px 10px; cursor: pointer; font: inherit;
+  }
+  #panel .pbody { padding: 10px 26px 60px; }
+
+  /* markdown */
+  .md h1 { font-size: 21px; margin: 18px 0 8px; }
+  .md h2 { font-size: 17px; margin: 22px 0 6px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  .md h3 { font-size: 14.5px; margin: 18px 0 4px; }
+  .md p, .md li { max-width: 74ch; }
+  .md code { background: var(--code-bg); border-radius: 4px; padding: 1px 5px; font-size: 12.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .md pre { background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  .md pre code { background: none; padding: 0; }
+  .md blockquote { border-left: 3px solid var(--line); margin: 8px 0; padding: 2px 14px; color: var(--fg2); }
+  .md table { border-collapse: collapse; margin: 10px 0; display: block; overflow-x: auto; }
+  .md th, .md td { border: 1px solid var(--line); padding: 5px 10px; font-size: 13px; }
+  .md a { color: var(--accent); }
+  .md hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
+
+  /* questions tab */
+  .qspec { margin: 18px 0 6px; font-weight: 600; }
+  .qitem { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 8px 0; }
+  .qitem.resolved { opacity: .55; }
+  .qitem .qid { color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin-right: 8px; }
+  .qitem .raw { margin-top: 8px; }
+  .qactions { margin-top: 10px; }
+  .qactions button {
+    border: 1px solid var(--line); background: none; color: var(--accent); cursor: pointer;
+    border-radius: 7px; padding: 4px 12px; font: inherit; font-size: 13px;
+  }
+  .answerbox { margin-top: 10px; display: none; }
+  .answerbox.show { display: block; }
+  .answerbox textarea {
+    width: 100%; min-height: 70px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--bg2); color: var(--fg); font: inherit; padding: 8px 10px; outline: none;
+  }
+  .answerbox textarea:focus { border-color: var(--accent); }
+  .answerbox .send { margin-top: 6px; background: var(--accent); color: #fff; border: none; }
+  .toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--fg); color: var(--bg); border-radius: 9px; padding: 9px 16px;
+    font-size: 13px; z-index: 50; display: none;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>specs explorer</h1>
+  <span class="counts" id="counts"></span>
+  <nav id="tabs"></nav>
+</header>
+<div class="bar">
+  <input type="search" id="q" placeholder="Search titles, notes, full text…">
+  <div class="chips" id="statusChips"></div>
+  <div class="chips" id="areaChips"></div>
+</div>
+<main id="main"></main>
+
+<div id="overlay"></div>
+<aside id="panel">
+  <div class="phead"><strong id="ptitle"></strong><button class="close" id="pclose">esc</button></div>
+  <div class="pbody"><div class="md" id="pmd"></div></div>
+</aside>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+let DATA = null;
+let tab = 'specs';
+let query = '';
+let statusFilter = null;
+let areaFilter = null;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ── tiny markdown renderer (headings, fences, lists, tables, inline) ─────────
+function inline(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, h) =>
+      /^(https?:)/.test(h) ? `<a href="${h}" target="_blank" rel="noopener">${t}</a>` : `<span title="${h}">${t}</span>`);
+}
+function md(src) {
+  const lines = String(src).split('\n');
+  const out = [];
+  let i = 0, list = null, para = [];
+  const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(' '))}</p>`); para = []; } };
+  const flushList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^```/.test(l)) {
+      flushPara(); flushList();
+      const buf = []; i++;
+      while (i < lines.length && !/^```/.test(lines[i])) buf.push(lines[i++]);
+      i++; out.push(`<pre><code>${esc(buf.join('\n'))}</code></pre>`); continue;
+    }
+    const h = l.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { flushPara(); flushList(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+    if (/^\s*---+\s*$/.test(l)) { flushPara(); flushList(); out.push('<hr>'); i++; continue; }
+    if (/^\|.*\|/.test(l)) {
+      flushPara(); flushList();
+      const rows = [];
+      while (i < lines.length && /^\|.*\|/.test(lines[i])) rows.push(lines[i++]);
+      const cells = (r) => r.replace(/^\||\|$/g, '').split('|').map((c) => inline(c.trim().replace(/\\\|/g, '|')));
+      let html = '<table>';
+      rows.forEach((r, k) => {
+        if (/^\|[\s:-]+\|/.test(r) && /-/.test(r)) return; // separator
+        const tag = k === 0 ? 'th' : 'td';
+        html += `<tr>${cells(r).map((c) => `<${tag}>${c}</${tag}>`).join('')}</tr>`;
+      });
+      out.push(html + '</table>'); continue;
+    }
+    const li = l.match(/^\s*([-*]|\d+\.)\s+(.*)$/);
+    if (li) {
+      flushPara();
+      const want = /\d/.test(li[1]) ? 'ol' : 'ul';
+      if (list !== want) { flushList(); out.push(`<${want}>`); list = want; }
+      // absorb continuation lines
+      const body = [li[2]]; i++;
+      while (i < lines.length && /^\s{2,}\S/.test(lines[i]) && !/^\s*([-*]|\d+\.)\s/.test(lines[i])) body.push(lines[i++].trim());
+      out.push(`<li>${inline(body.join(' '))}</li>`); continue;
+    }
+    if (/^>\s?/.test(l)) {
+      flushPara(); flushList();
+      const buf = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) buf.push(lines[i++].replace(/^>\s?/, ''));
+      out.push(`<blockquote>${md(buf.join('\n'))}</blockquote>`); continue;
+    }
+    if (!l.trim()) { flushPara(); flushList(); i++; continue; }
+    para.push(l.trim()); i++;
+  }
+  flushPara(); flushList();
+  return out.join('\n');
+}
+// strip frontmatter for display
+const stripFm = (t) => t.replace(/^---\n[\s\S]*?\n---\n?/, '');
+
+// ── rendering ────────────────────────────────────────────────────────────────
+const TABS = [['specs', 'Specs'], ['research', 'Research'], ['adrs', 'ADRs'], ['questions', 'Open questions']];
+
+function renderTabs() {
+  $('tabs').innerHTML = TABS.map(([k, label]) =>
+    `<button class="${tab === k ? 'on' : ''}" data-tab="${k}">${label}</button>`).join('');
+}
+function chips(el, values, current, kind) {
+  el.innerHTML = values.map((v) =>
+    `<button class="chip ${current === v ? 'on' : ''}" data-${kind}="${esc(v)}">${esc(v)}</button>`).join('');
+}
+function matches(hay) { return !query || hay.toLowerCase().includes(query); }
+
+function renderMain() {
+  const m = $('main');
+  const showFilters = tab === 'specs';
+  $('statusChips').style.display = showFilters ? '' : 'none';
+  $('areaChips').style.display = showFilters ? '' : 'none';
+
+  if (tab === 'specs') {
+    const specs = DATA.specs.filter((s) =>
+      (!statusFilter || s.status === statusFilter) &&
+      (!areaFilter || s.area === areaFilter) &&
+      matches(`${s.number} ${s.title} ${s.note} ${s.body}`));
+    m.innerHTML = specs.length ? `<table class="list">
+      <tr><th>#</th><th>Title</th><th>Status</th><th>Created</th><th>Depends on</th><th>Note</th></tr>
+      ${specs.map((s) => `<tr class="row" data-open="spec:${s.file}">
+        <td class="num">${s.number}</td>
+        <td><span class="t">${esc(s.title)}</span></td>
+        <td class="status">${esc(s.statusLabel)}${s.blockedBy.length ? ' <span class="blocked">⛔</span>' : ''}</td>
+        <td class="muted">${esc(s.created)}</td>
+        <td class="num">${s.dependsOn.join(', ') || '—'}</td>
+        <td class="note">${esc(s.note).slice(0, 160)}</td>
+      </tr>`).join('')}
+    </table>` : '<div class="empty">No specs match.</div>';
+  } else if (tab === 'research') {
+    const docs = DATA.research.filter((r) => matches(`${r.title} ${r.note} ${r.body}`));
+    m.innerHTML = docs.length ? `<table class="list">
+      <tr><th>Doc</th><th>Status</th><th>Date</th><th>Spawned</th><th>Note</th></tr>
+      ${docs.map((r) => `<tr class="row" data-open="research:${r.file}">
+        <td><span class="t">${esc(r.title)}</span></td>
+        <td class="status">${esc(r.statusLabel)}</td>
+        <td class="muted">${esc(r.created)}</td>
+        <td class="num">${r.spawned.join(', ') || '—'}</td>
+        <td class="note">${esc(r.note).slice(0, 160)}</td>
+      </tr>`).join('')}
+    </table>` : '<div class="empty">No research docs match.</div>';
+  } else if (tab === 'adrs') {
+    const adrs = DATA.adrs.filter((a) => matches(`${a.number} ${a.title} ${a.body}`));
+    m.innerHTML = adrs.length ? `<table class="list">
+      <tr><th>#</th><th>Decision</th><th>Status</th></tr>
+      ${adrs.map((a) => `<tr class="row" data-open="adr:${a.file}">
+        <td class="num">${a.number}</td>
+        <td><span class="t">${esc(a.title)}</span></td>
+        <td class="muted">${esc(a.status)}</td>
+      </tr>`).join('')}
+    </table>` : '<div class="empty">No ADRs match.</div>';
+  } else {
+    const withQ = DATA.specs.filter((s) => s.oq && s.oq.items.length &&
+      matches(`${s.number} ${s.title} ${s.oq.items.map((i) => i.raw).join(' ')}`));
+    if (!withQ.length) { m.innerHTML = '<div class="empty">No open-questions sections found.</div>'; return; }
+    m.innerHTML = withQ.map((s) => {
+      const items = s.oq.items.slice().sort((a, b) => a.resolved - b.resolved);
+      return `<div class="qspec"><span class="num">${s.number}</span> ${esc(s.title)}</div>` +
+        items.map((it, idx) => `<div class="qitem ${it.resolved ? 'resolved' : ''}">
+          ${it.id ? `<span class="qid">${esc(it.id)}</span>` : ''}<strong>${esc(it.title)}</strong>
+          <div class="raw md">${md(it.raw.replace(/^(\d+\.|[-*])\s+/, ''))}</div>
+          ${it.resolved ? '' : `<div class="qactions"><button data-answer="${s.file}|${it.startLine}|${it.endLine}|${s.fileHash}">Answer…</button></div>
+          <div class="answerbox" id="ab-${esc(s.file)}-${idx}">
+            <textarea placeholder="The resolution — appended as ✅ RESOLVED under the item"></textarea>
+            <button class="send chip" data-send="${s.file}|${it.startLine}|${it.endLine}|${s.fileHash}">Append resolution</button>
+          </div>`}
+        </div>`).join('');
+    }).join('');
+  }
+}
+
+function openDoc(ref) {
+  const [kind, file] = [ref.slice(0, ref.indexOf(':')), ref.slice(ref.indexOf(':') + 1)];
+  const src = kind === 'spec' ? DATA.specs : kind === 'research' ? DATA.research : DATA.adrs;
+  const doc = src.find((d) => d.file === file);
+  if (!doc) return;
+  $('ptitle').textContent = `${doc.number ? doc.number + ' — ' : ''}${doc.title}`;
+  $('pmd').innerHTML = md(stripFm(doc.body));
+  $('overlay').classList.add('show'); $('panel').classList.add('show');
+}
+function closeDoc() { $('overlay').classList.remove('show'); $('panel').classList.remove('show'); }
+
+function toast(msg, ms = 2600) {
+  const t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(t._h); t._h = setTimeout(() => (t.style.display = 'none'), ms);
+}
+
+async function load() {
+  DATA = await (await fetch('/api/data')).json();
+  const oqOpen = DATA.specs.reduce((n, s) => n + (s.oq ? s.oq.items.filter((i) => !i.resolved).length : 0), 0);
+  $('counts').textContent =
+    `${DATA.specs.length} specs · ${DATA.research.length} research · ${DATA.adrs.length} ADRs · ${oqOpen} open questions`;
+  const statuses = [...new Set(DATA.specs.map((s) => s.status))];
+  const areas = [...new Set(DATA.specs.map((s) => s.area))];
+  chips($('statusChips'), statuses, statusFilter, 'status');
+  chips($('areaChips'), areas.length > 1 ? areas : [], areaFilter, 'area');
+  renderTabs(); renderMain();
+}
+
+document.addEventListener('click', async (e) => {
+  const t = e.target.closest('[data-tab],[data-status],[data-area],[data-open],[data-answer],[data-send],#pclose,#overlay');
+  if (!t) return;
+  if (t.dataset.tab) { tab = t.dataset.tab; renderTabs(); renderMain(); }
+  else if (t.dataset.status) { statusFilter = statusFilter === t.dataset.status ? null : t.dataset.status; load(); }
+  else if (t.dataset.area) { areaFilter = areaFilter === t.dataset.area ? null : t.dataset.area; load(); }
+  else if (t.dataset.open) openDoc(t.dataset.open);
+  else if (t.id === 'pclose' || t.id === 'overlay') closeDoc();
+  else if (t.dataset.answer) t.closest('.qitem').querySelector('.answerbox').classList.add('show');
+  else if (t.dataset.send) {
+    const [file, startLine, endLine, fileHash] = t.dataset.send.split('|');
+    const answer = t.closest('.answerbox').querySelector('textarea').value.trim();
+    if (!answer) return toast('Write the resolution first.');
+    const res = await fetch('/api/answer', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        file, startLine: Number(startLine), endLine: Number(endLine), answer, fileHash,
+        date: new Date().toISOString().slice(0, 10),
+      }),
+    });
+    const body = await res.json();
+    if (res.ok) { toast(`Resolved — written to ${file}`); load(); }
+    else toast(body.error || 'Failed to write.', 4200);
+  }
+});
+$('q').addEventListener('input', (e) => { query = e.target.value.trim().toLowerCase(); renderMain(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDoc(); });
+load();
+</script>
+</body>
+</html>
